@@ -1,0 +1,2814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEADit — They're Still Watching</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Share+Tech+Mono&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blood: #8b0000;
+    --blood-bright: #cc0000;
+    --void: #000000;
+    --dark: #080808;
+    --surface: #0d0d0d;
+    --surface2: #111111;
+    --surface3: #161616;
+    --border: #1a1a1a;
+    --border-red: #2a0000;
+    --text: #c8c8c8;
+    --text-dim: #666;
+    --text-dead: #333;
+    --accent: #ff2222;
+    --glow: rgba(139,0,0,0.4);
+    --fog: rgba(10,0,0,0.85);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  ::selection { background: var(--blood); color: #fff; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--void);
+    color: var(--text);
+    font-family: 'Crimson Text', Georgia, serif;
+    font-size: 16px;
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='3' fill='%238b0000'/%3E%3C/svg%3E") 10 10, crosshair;
+  }
+
+  /* ──────────────────────────────────────────
+     CANVAS BACKGROUND
+  ────────────────────────────────────────── */
+  #bg-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.60;   /* bats are blackout-only, moderate opacity for atmosphere */
+  }
+
+  /* ── dedicated bolt canvas for lightning ── */
+  #bolt-canvas {
+    position: fixed; inset: 0;
+    z-index: 9995;
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  /* ──────────────────────────────────────────
+     EFFECTS LAYERS
+  ────────────────────────────────────────── */
+  #lightning-layer {
+    position: fixed; inset: 0;
+    background: transparent;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.05s;
+  }
+  #glitch-overlay {
+    position: fixed; inset: 0;
+    z-index: 9998;
+    pointer-events: none;
+    opacity: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0.15) 0px,
+      rgba(0,0,0,0.15) 1px,
+      transparent 1px,
+      transparent 2px
+    );
+  }
+  #vignette {
+    position: fixed; inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.92) 100%);
+  }
+  #fog-layer {
+    position: fixed; inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(5,0,0,0.7) 0%, transparent 30%, transparent 70%, rgba(5,0,0,0.8) 100%);
+  }
+  #blackout {
+    position: fixed; inset: 0;
+    z-index: 10000;
+    background: #000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  #popup-layer {
+    position: fixed; inset: 0;
+    z-index: 9997;
+    pointer-events: none;
+  }
+  .creepy-popup {
+    position: absolute;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: #ff0000;
+    opacity: 0;
+    white-space: nowrap;
+    text-shadow: 0 0 8px #ff0000;
+    pointer-events: none;
+    animation: fadePopup 3s forwards;
+  }
+  @keyframes fadePopup {
+    0%   { opacity: 0; transform: scale(0.8); }
+    15%  { opacity: 0.9; transform: scale(1); }
+    70%  { opacity: 0.9; }
+    100% { opacity: 0; transform: scale(1.05) translateY(-10px); }
+  }
+  .eye-popup {
+    position: absolute;
+    font-size: 28px;
+    opacity: 0;
+    pointer-events: none;
+    animation: eyeAnim 2.5s forwards;
+    filter: drop-shadow(0 0 6px #ff0000);
+  }
+  @keyframes eyeAnim {
+    0%   { opacity: 0; transform: scale(0); }
+    20%  { opacity: 1; transform: scale(1); }
+    80%  { opacity: 1; }
+    100% { opacity: 0; transform: scale(0.5) rotate(20deg); }
+  }
+
+  /* ──────────────────────────────────────────
+     SCAN LINES
+  ────────────────────────────────────────── */
+  #scanlines {
+    position: fixed; inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    animation: scanMove 8s linear infinite;
+  }
+  @keyframes scanMove {
+    0%   { background-position: 0 0; }
+    100% { background-position: 0 100px; }
+  }
+
+  /* ──────────────────────────────────────────
+     CONTENT WRAPPER
+  ────────────────────────────────────────── */
+  #content {
+    position: relative;
+    z-index: 10;
+    min-height: 100vh;
+  }
+
+  /* ──────────────────────────────────────────
+     HEADER
+  ────────────────────────────────────────── */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(5,0,0,0.97);
+    border-bottom: 1px solid var(--border-red);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 2px 40px rgba(139,0,0,0.3);
+    padding: 0 24px;
+  }
+  .header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    height: 52px;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: var(--blood);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 0 14px var(--blood-bright), inset 0 0 8px rgba(0,0,0,0.5);
+    animation: pulseGlow 3s ease-in-out infinite;
+    position: relative;
+    overflow: visible;
+  }
+  .logo-icon::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 1px solid rgba(200,0,0,0.3);
+    animation: rippleRing 3s ease-out infinite;
+  }
+  @keyframes rippleRing {
+    0%   { transform: scale(1); opacity: 0.7; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 14px var(--blood-bright), inset 0 0 8px rgba(0,0,0,0.5); }
+    50%       { box-shadow: 0 0 28px #ff3333, 0 0 50px rgba(200,0,0,0.3), inset 0 0 8px rgba(0,0,0,0.5); }
+  }
+  .logo-text {
+    font-family: 'Creepster', cursive;
+    font-size: 28px;
+    color: #fff;
+    letter-spacing: 2px;
+    text-shadow: 0 0 20px var(--blood-bright), 2px 2px 4px #000;
+  }
+  .logo-text span { color: var(--blood-bright); }
+
+  .header-search {
+    flex: 1;
+    max-width: 480px;
+  }
+  .search-bar {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-red);
+    border-radius: 20px;
+    padding: 7px 16px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    transition: all 0.3s;
+  }
+  .search-bar::placeholder { color: #333; }
+  .search-bar:focus {
+    border-color: var(--blood);
+    background: rgba(139,0,0,0.07);
+    box-shadow: 0 0 12px rgba(139,0,0,0.3);
+  }
+
+  nav { display: flex; gap: 4px; margin-left: auto; }
+  .nav-btn {
+    background: transparent;
+    border: 1px solid var(--border-red);
+    color: var(--text-dim);
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+  }
+  .nav-btn:hover { border-color: var(--blood); color: var(--blood-bright); background: rgba(139,0,0,0.1); }
+  .nav-btn.active { border-color: var(--blood-bright); color: #fff; background: var(--blood); }
+
+  /* Nightmare toggle */
+  #nightmare-btn {
+    background: linear-gradient(135deg, #1a0000, #2a0000);
+    border: 1px solid #440000;
+    color: #ff4444;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+    letter-spacing: 1px;
+    position: relative;
+    overflow: hidden;
+  }
+  #nightmare-btn.active {
+    background: linear-gradient(135deg, #3a0000, #660000);
+    box-shadow: 0 0 20px rgba(255,0,0,0.4);
+    color: #fff;
+  }
+  #nightmare-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,0,0,0.15), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.4s;
+  }
+  #nightmare-btn:hover::before { transform: translateX(100%); }
+
+  /* ──────────────────────────────────────────
+     SUBHEADER / SORT BAR
+  ────────────────────────────────────────── */
+  .sort-bar {
+    background: rgba(8,0,0,0.9);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sort-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 8px; width: 100%; }
+  .sort-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-dim);
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .sort-btn:hover { color: var(--text); border-color: var(--border-red); }
+  .sort-btn.active { color: var(--blood-bright); border-color: var(--blood); background: rgba(139,0,0,0.12); }
+  .sort-btn .icon { font-size: 14px; }
+
+  /* ──────────────────────────────────────────
+     MAIN LAYOUT
+  ────────────────────────────────────────── */
+  .main-layout {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: 1fr 312px;
+    gap: 24px;
+    align-items: start;
+  }
+
+  /* ──────────────────────────────────────────
+     FEED
+  ────────────────────────────────────────── */
+  .feed { display: flex; flex-direction: column; gap: 10px; }
+
+  /* ──────────────────────────────────────────
+     POST CARD
+  ────────────────────────────────────────── */
+  .post-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+  .post-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: transparent;
+    transition: all 0.3s;
+  }
+  .post-card:hover {
+    border-color: var(--border-red);
+    box-shadow: 0 0 20px rgba(139,0,0,0.15), inset 0 0 40px rgba(139,0,0,0.03);
+    transform: translateX(2px);
+  }
+  .post-card:hover::before { background: var(--blood); }
+
+  /* blood drip on hover */
+  .post-card::after {
+    content: '';
+    position: absolute;
+    top: -2px; right: 20px;
+    width: 2px; height: 0;
+    background: linear-gradient(180deg, var(--blood-bright), transparent);
+    transition: height 0.4s ease;
+    border-radius: 0 0 4px 4px;
+  }
+  .post-card:hover::after { height: 40px; }
+
+  /* Vote column */
+  .vote-col {
+    width: 44px;
+    flex-shrink: 0;
+    background: var(--surface2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0;
+    gap: 4px;
+    border-right: 1px solid var(--border);
+  }
+  .vote-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 28px; height: 28px;
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    transition: all 0.15s;
+    color: var(--text-dead);
+    position: relative;
+    overflow: hidden;
+  }
+  .vote-btn:hover { background: rgba(139,0,0,0.2); color: var(--blood-bright); }
+  .vote-btn.upvoted { color: var(--blood-bright); background: rgba(139,0,0,0.15); }
+  .vote-btn.downvoted { color: #4444cc; background: rgba(0,0,100,0.15); }
+  .vote-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle, rgba(255,0,0,0.4), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .vote-btn.upvoted::after { opacity: 1; animation: splatter 0.4s forwards; }
+  @keyframes splatter {
+    0%   { transform: scale(0); opacity: 1; }
+    100% { transform: scale(2); opacity: 0; }
+  }
+  .vote-count {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    min-width: 30px;
+    text-align: center;
+    transition: color 0.2s;
+  }
+  .vote-count.hot { color: var(--blood-bright); text-shadow: 0 0 8px rgba(200,0,0,0.5); }
+
+  /* Post body */
+  .post-body {
+    flex: 1;
+    padding: 10px 12px;
+    min-width: 0;
+  }
+  .post-meta {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dead);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .post-sub {
+    color: var(--blood-bright);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .post-sub:hover { text-decoration: underline; }
+  .post-author { color: var(--text-dim); }
+  .post-author span { color: #c0c0c0; }
+  .post-author span:hover { color: var(--blood-bright); cursor: pointer; text-decoration: underline; }
+  .post-time { color: var(--text-dead); }
+  .flair {
+    background: rgba(139,0,0,0.2);
+    border: 1px solid var(--border-red);
+    color: #cc4444;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+  }
+  .post-title {
+    font-family: 'Crimson Text', Georgia, serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: #e8e8e8;
+    line-height: 1.4;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .post-title:hover { color: var(--blood-bright); }
+  .post-preview {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 10px;
+    font-style: italic;
+    border-left: 2px solid var(--border-red);
+    padding-left: 10px;
+  }
+  .post-expanded-content {
+    display: none;
+    font-size: 15px;
+    color: var(--text);
+    line-height: 1.8;
+    margin-bottom: 14px;
+    border-left: 2px solid var(--blood);
+    padding-left: 14px;
+  }
+  .post-expanded-content.visible { display: block; animation: fadeIn 0.4s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+  .post-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .post-action-btn {
+    background: none;
+    border: none;
+    color: var(--text-dead);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 3px;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .post-action-btn:hover { background: rgba(139,0,0,0.12); color: var(--text); }
+  .post-action-btn.read-more { color: var(--blood-bright); }
+  .post-action-btn.read-more:hover { background: rgba(139,0,0,0.2); }
+
+  /* post image thumbnail */
+  .post-thumb {
+    width: 92px;
+    height: 72px;
+    flex-shrink: 0;
+    margin: 10px 10px 10px 0;
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--border-red);
+    cursor: pointer;
+  }
+  .post-thumb img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    filter: grayscale(40%) contrast(1.1) brightness(0.7);
+    transition: filter 0.3s;
+  }
+  .post-thumb:hover img { filter: grayscale(0%) contrast(1.2) brightness(0.9); }
+  .thumb-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(139,0,0,0.15);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 24px;
+  }
+  .post-thumb:hover .thumb-overlay { opacity: 1; }
+
+  /* ──────────────────────────────────────────
+     COMMENTS
+  ────────────────────────────────────────── */
+  .comments-section {
+    display: none;
+    border-top: 1px solid var(--border-red);
+    background: rgba(0,0,0,0.4);
+    padding: 14px 14px 14px 56px;
+    animation: fadeIn 0.3s;
+  }
+  .comments-section.visible { display: block; }
+  .comment-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .comment-input {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border-red);
+    border-radius: 4px;
+    padding: 10px;
+    color: var(--text);
+    font-family: 'Crimson Text', serif;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 70px;
+    outline: none;
+    transition: all 0.3s;
+  }
+  .comment-input:focus {
+    border-color: var(--blood);
+    box-shadow: 0 0 10px rgba(139,0,0,0.2);
+    background: rgba(139,0,0,0.04);
+  }
+  .comment-input::placeholder { color: #2a2a2a; font-style: italic; }
+  .comment-submit {
+    align-self: flex-end;
+    background: var(--blood);
+    border: none;
+    color: #fff;
+    padding: 7px 18px;
+    border-radius: 3px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+  .comment-submit:hover { background: var(--blood-bright); box-shadow: 0 0 12px rgba(200,0,0,0.4); }
+
+  .comment {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    position: relative;
+  }
+  .comment::before {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 28px;
+    bottom: 0;
+    width: 1px;
+    background: var(--border-red);
+  }
+  .comment-avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--blood);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    border: 1px solid var(--border-red);
+    position: relative;
+    z-index: 1;
+  }
+  .comment-right { flex: 1; }
+  .comment-header {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dead);
+    margin-bottom: 4px;
+  }
+  .comment-author { color: #aaa; font-weight: 600; }
+  .comment-author:hover { color: var(--blood-bright); cursor: pointer; }
+  .comment-text {
+    font-size: 14px;
+    color: #bbb;
+    line-height: 1.6;
+  }
+  .comment-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dead);
+  }
+  .comment-actions button {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-dead); font-family: inherit; font-size: inherit;
+    transition: color 0.15s;
+  }
+  .comment-actions button:hover { color: var(--blood-bright); }
+
+  /* ──────────────────────────────────────────
+     SIDEBAR
+  ────────────────────────────────────────── */
+  .sidebar { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 72px; }
+  .sidebar-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .sidebar-card:hover { border-color: var(--border-red); }
+  .sidebar-header {
+    background: linear-gradient(135deg, var(--blood) 0%, #3a0000 100%);
+    padding: 10px 14px;
+    font-family: 'Creepster', cursive;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: #fff;
+    text-shadow: 1px 1px 4px #000;
+    border-bottom: 1px solid rgba(0,0,0,0.3);
+  }
+  .sidebar-body { padding: 14px; }
+
+  /* About community */
+  .about-text {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    margin-bottom: 14px;
+    font-style: italic;
+    border-left: 2px solid var(--blood);
+    padding-left: 10px;
+  }
+  .community-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .stat-item { text-align: center; }
+  .stat-num {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px;
+    color: var(--blood-bright);
+    text-shadow: 0 0 8px rgba(200,0,0,0.4);
+  }
+  .stat-label { font-size: 11px; color: var(--text-dead); font-family: 'Share Tech Mono', monospace; }
+
+  /* Submit button */
+  .sidebar-submit {
+    display: block;
+    width: 100%;
+    background: linear-gradient(135deg, var(--blood), #440000);
+    border: none;
+    color: #fff;
+    padding: 10px;
+    border-radius: 3px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.3s;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .sidebar-submit:hover {
+    background: linear-gradient(135deg, var(--blood-bright), #660000);
+    box-shadow: 0 0 16px rgba(200,0,0,0.4);
+  }
+
+  /* Category list */
+  .category-list { list-style: none; }
+  .category-list li {
+    border-bottom: 1px solid var(--border);
+    last-child { border: none; }
+  }
+  .category-list a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 14px;
+    transition: color 0.2s;
+  }
+  .category-list a:hover { color: var(--blood-bright); }
+  .cat-icon { font-size: 16px; margin-right: 8px; }
+  .cat-count {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dead);
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 10px;
+  }
+
+  /* Rules */
+  .rules-list { list-style: none; counter-reset: rules; }
+  .rules-list li {
+    counter-increment: rules;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-dim);
+    display: flex;
+    gap: 10px;
+  }
+  .rules-list li::before {
+    content: counter(rules) ".";
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--blood-bright);
+    flex-shrink: 0;
+    min-width: 18px;
+  }
+
+  /* Online indicator */
+  .online-dot {
+    width: 8px; height: 8px;
+    background: #ff3333;
+    border-radius: 50%;
+    display: inline-block;
+    animation: blink 1.5s ease-in-out infinite;
+    margin-right: 6px;
+    box-shadow: 0 0 6px #ff0000;
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+  /* blood drip decoration */
+  .drip-bar {
+    height: 6px;
+    background: linear-gradient(90deg, var(--blood), var(--blood-bright), var(--blood));
+    position: relative;
+    overflow: visible;
+  }
+  .drip-bar::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px; height: 8px;
+    background: var(--blood);
+    border-radius: 0 0 4px 4px;
+    box-shadow: -30px 0 0 2px var(--blood-bright), 30px 0 0 2px var(--blood),
+                -60px -2px 0 1px var(--blood), 60px -2px 0 1px var(--blood-bright);
+  }
+
+  /* ──────────────────────────────────────────
+     AWARD BADGES
+  ────────────────────────────────────────── */
+  .awards {
+    display: flex; gap: 4px; margin-left: 6px;
+  }
+  .award {
+    font-size: 14px;
+    cursor: default;
+    filter: drop-shadow(0 0 4px rgba(255,100,0,0.6));
+    transition: transform 0.2s;
+  }
+  .award:hover { transform: scale(1.3); }
+
+  /* ──────────────────────────────────────────
+     FLICKER ANIMATION
+  ────────────────────────────────────────── */
+  @keyframes flicker {
+    0%, 95%, 100% { opacity: 1; }
+    96%            { opacity: 0.4; }
+    97%            { opacity: 1; }
+    98%            { opacity: 0.6; }
+    99%            { opacity: 1; }
+  }
+  .flicker { animation: flicker 8s linear infinite; }
+
+  /* ──────────────────────────────────────────
+     NIGHTMARE MODE
+  ────────────────────────────────────────── */
+  body.nightmare {
+    animation: bodyFlicker 0.1s infinite;
+  }
+  @keyframes bodyFlicker {
+    0%   { filter: hue-rotate(0deg) brightness(1); }
+    25%  { filter: hue-rotate(2deg) brightness(1.02); }
+    50%  { filter: hue-rotate(-1deg) brightness(0.98); }
+    100% { filter: hue-rotate(1deg) brightness(1.01); }
+  }
+  body.nightmare .post-card { animation: shake 0.5s ease-in-out infinite; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25%       { transform: translateX(-0.5px); }
+    75%       { transform: translateX(0.5px); }
+  }
+  body.nightmare .logo-text { animation: glitchText 2s infinite; }
+  @keyframes glitchText {
+    0%, 90%, 100% { text-shadow: 0 0 20px var(--blood-bright), 2px 2px 4px #000; clip-path: none; }
+    92%  { text-shadow: -2px 0 #ff0000, 2px 0 #00ffff; clip-path: inset(10% 0 80% 0); }
+    94%  { text-shadow: 2px 0 #ff0000, -2px 0 #00ffff; clip-path: inset(50% 0 30% 0); }
+    96%  { text-shadow: 0 0 20px var(--blood-bright); clip-path: none; }
+  }
+
+  /* ──────────────────────────────────────────
+     FOOTER
+  ────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border-red);
+    margin-top: 40px;
+    padding: 20px 24px;
+    text-align: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dead);
+    background: rgba(5,0,0,0.6);
+  }
+  footer a { color: var(--blood); text-decoration: none; }
+  footer a:hover { color: var(--blood-bright); }
+
+  /* ──────────────────────────────────────────
+     SOUND TOGGLE
+  ────────────────────────────────────────── */
+  #sound-btn {
+    position: fixed;
+    bottom: 20px; right: 20px;
+    z-index: 200;
+    background: rgba(10,0,0,0.9);
+    border: 1px solid var(--blood);
+    color: var(--blood-bright);
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s;
+    box-shadow: 0 0 14px rgba(139,0,0,0.3);
+  }
+  #sound-btn:hover { background: var(--blood); box-shadow: 0 0 20px rgba(200,0,0,0.5); }
+
+  /* ──────────────────────────────────────────
+     BLOOD COUNTER
+  ────────────────────────────────────────── */
+  .ticker {
+    background: rgba(5,0,0,0.95);
+    border-bottom: 1px solid var(--border-red);
+    border-top: 1px solid var(--border-red);
+    padding: 6px 24px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: #440000;
+    display: flex; gap: 20px; align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .ticker-item { color: #550000; animation: scrollTicker 40s linear infinite; display: inline-block; }
+  @keyframes scrollTicker { from { transform: translateX(100vw); } to { transform: translateX(-200%); } }
+  .ticker-sep { color: var(--blood); margin: 0 10px; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    z-index: 10001;
+    background: rgba(0,0,0,0.85);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--blood);
+    border-radius: 6px;
+    padding: 28px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 0 60px rgba(139,0,0,0.4);
+    animation: modalIn 0.3s;
+  }
+  @keyframes modalIn { from { transform: scale(0.9) translateY(-20px); } to { transform: none; } }
+  .modal-title {
+    font-family: 'Creepster', cursive;
+    font-size: 26px;
+    color: var(--blood-bright);
+    margin-bottom: 16px;
+    text-shadow: 0 0 14px rgba(200,0,0,0.4);
+  }
+  .modal-input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-red);
+    border-radius: 4px;
+    padding: 10px;
+    color: var(--text);
+    font-family: 'Crimson Text', serif;
+    font-size: 15px;
+    margin-bottom: 10px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .modal-input:focus { border-color: var(--blood); }
+  .modal-textarea {
+    width: 100%;
+    min-height: 120px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-red);
+    border-radius: 4px;
+    padding: 10px;
+    color: var(--text);
+    font-family: 'Crimson Text', serif;
+    font-size: 15px;
+    margin-bottom: 10px;
+    outline: none;
+    resize: vertical;
+    transition: border-color 0.2s;
+  }
+  .modal-textarea:focus { border-color: var(--blood); }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .modal-cancel {
+    background: transparent;
+    border: 1px solid var(--border-red);
+    color: var(--text-dim);
+    padding: 8px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  .modal-cancel:hover { border-color: var(--blood); color: var(--text); }
+  .modal-post {
+    background: var(--blood);
+    border: none;
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  .modal-post:hover { background: var(--blood-bright); box-shadow: 0 0 12px rgba(200,0,0,0.4); }
+
+  /* scroll bar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--void); }
+  ::-webkit-scrollbar-thumb { background: #1a0000; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--blood); }
+
+  @media (max-width: 768px) {
+    .main-layout { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .header-inner { gap: 10px; }
+    .logo-text { font-size: 22px; }
+    nav { display: none; }
+  }
+
+  /* ──────────────────────────────────────────
+     FEATURED USER POST
+  ────────────────────────────────────────── */
+  .featured-user-post {
+    border: 1px solid #660000 !important;
+    background: linear-gradient(135deg, #0d0000 0%, #110000 60%, #0d0000 100%) !important;
+    box-shadow:
+      0 0 0 1px rgba(200,0,0,0.15),
+      0 0 24px rgba(180,0,0,0.2),
+      inset 0 0 60px rgba(100,0,0,0.06) !important;
+    animation: featuredPulse 4s ease-in-out infinite;
+    position: relative;
+  }
+  @keyframes featuredPulse {
+    0%, 100% {
+      box-shadow: 0 0 0 1px rgba(200,0,0,0.15), 0 0 24px rgba(180,0,0,0.2), inset 0 0 60px rgba(100,0,0,0.06);
+    }
+    50% {
+      box-shadow: 0 0 0 1px rgba(255,0,0,0.35), 0 0 40px rgba(220,0,0,0.35), inset 0 0 80px rgba(140,0,0,0.1);
+    }
+  }
+  .featured-user-post::before {
+    background: linear-gradient(180deg, #ff2222, #880000) !important;
+    width: 4px !important;
+    box-shadow: 0 0 8px #ff0000;
+  }
+  .featured-user-post:hover {
+    transform: translateX(3px) !important;
+  }
+  .user-post-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: linear-gradient(135deg, #550000, #220000);
+    border: 1px solid #880000;
+    color: #ff4444;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-left: 6px;
+    box-shadow: 0 0 8px rgba(255,0,0,0.3);
+    animation: badgeFlicker 3s ease-in-out infinite;
+  }
+  @keyframes badgeFlicker {
+    0%, 90%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(255,0,0,0.3); }
+    92% { opacity: 0.5; }
+    94% { opacity: 1; box-shadow: 0 0 16px rgba(255,0,0,0.6); }
+  }
+  .featured-user-post .post-title {
+    color: #f0d0d0 !important;
+    font-size: 19px !important;
+  }
+  .featured-user-post .vote-col {
+    background: rgba(30,0,0,0.8) !important;
+    border-right-color: #440000 !important;
+  }
+  .featured-user-post .post-preview {
+    border-left-color: var(--blood-bright) !important;
+    color: #888 !important;
+  }
+
+  /* ──────────────────────────────────────────
+     SYSTEM TERMINAL LOG
+  ────────────────────────────────────────── */
+  #system-terminal {
+    position: fixed;
+    bottom: 72px;
+    right: 20px;
+    z-index: 500;
+    width: 320px;
+    background: rgba(3,0,0,0.95);
+    border: 1px solid #1a0000;
+    border-radius: 4px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.4s, transform 0.4s;
+    pointer-events: none;
+    box-shadow: 0 0 20px rgba(100,0,0,0.2);
+  }
+  #system-terminal.visible {
+    opacity: 1;
+    transform: none;
+  }
+  .terminal-header {
+    background: #0a0000;
+    padding: 4px 10px;
+    color: #330000;
+    font-size: 9px;
+    border-bottom: 1px solid #1a0000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .terminal-header span:last-child { color: #440000; }
+  .terminal-body {
+    padding: 8px 10px;
+    max-height: 110px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .terminal-line {
+    color: #440000;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: termLine 0.2s ease;
+  }
+  .terminal-line.warn { color: #880000; }
+  .terminal-line.alert { color: #cc2200; }
+  .terminal-line.cursor::after {
+    content: '█';
+    animation: blink 0.8s step-end infinite;
+    color: #660000;
+  }
+  @keyframes termLine { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; } }
+
+  /* ──────────────────────────────────────────
+     SCREAMER OVERLAY
+  ────────────────────────────────────────── */
+  #screamer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+  }
+  #screamer-text {
+    font-family: 'Creepster', cursive;
+    font-size: clamp(40px, 8vw, 100px);
+    color: #ff0000;
+    text-align: center;
+    text-shadow: 0 0 40px #ff0000, 0 0 80px rgba(255,0,0,0.5);
+    letter-spacing: 4px;
+    filter: blur(0px);
+  }
+
+  /* ──────────────────────────────────────────
+     DEEP WEB STATUS BAR
+  ────────────────────────────────────────── */
+  #deepweb-status {
+    position: fixed;
+    top: 52px;
+    right: 0;
+    z-index: 99;
+    background: rgba(5,0,0,0.9);
+    border-left: 1px solid #1a0000;
+    border-bottom: 1px solid #1a0000;
+    border-bottom-left-radius: 4px;
+    padding: 4px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: #330000;
+    pointer-events: none;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+  #deepweb-status .ds-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: #330000;
+    display: inline-block;
+    animation: blink 2s step-end infinite;
+  }
+  #deepweb-status .ds-dot.active { background: #660000; }
+  #access-warning {
+    position: fixed;
+    top: 52px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    background: rgba(60,0,0,0.9);
+    border: 1px solid #660000;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    padding: 4px 20px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: #ff4444;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+    letter-spacing: 1px;
+  }
+  #access-warning.show { opacity: 1; }
+
+  /* ──────────────────────────────────────────
+     BLACKOUT BATS CANVAS
+  ────────────────────────────────────────── */
+  #blackout-bats {
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+    pointer-events: none;
+    opacity: 0;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── EFFECTS ────────────────────────────── -->
+<canvas id="bg-canvas"></canvas>
+<div id="lightning-layer"></div>
+<div id="glitch-overlay"></div>
+<div id="vignette"></div>
+<div id="fog-layer"></div>
+<div id="scanlines"></div>
+<div id="blackout"></div>
+<div id="popup-layer"></div>
+<canvas id="blackout-bats"></canvas>
+<canvas id="bolt-canvas"></canvas>
+
+<!-- SCREAMER -->
+<div id="screamer-overlay"><div id="screamer-text"></div></div>
+
+<!-- DEEP WEB STATUS BAR -->
+<div id="deepweb-status">
+  <span><span class="ds-dot active"></span> TOR_RELAY</span>
+  <span><span class="ds-dot"></span> PROXY_CHAIN</span>
+  <span id="ds-souls"><span class="ds-dot active"></span> <span id="soul-count">3847</span> SOULS</span>
+  <span><span class="ds-dot active"></span> ARCHIVED</span>
+</div>
+<div id="access-warning">⚠ UNAUTHORIZED ACCESS DETECTED — IP LOGGED</div>
+
+<!-- SYSTEM TERMINAL -->
+<div id="system-terminal">
+  <div class="terminal-header">
+    <span>SYS://deadit.onion — ARCHIVE_ROOT</span>
+    <span id="term-time">--:--:--</span>
+  </div>
+  <div class="terminal-body" id="terminal-body">
+    <div class="terminal-line">> INITIALIZING ARCHIVE_DAEMON...</div>
+    <div class="terminal-line warn">> WARNING: CONTENT FLAGGED BY AUTHORITY</div>
+    <div class="terminal-line">> BYPASSING CENSOR FILTER... OK</div>
+    <div class="terminal-line alert">> YOUR SESSION HAS BEEN LOGGED</div>
+    <div class="terminal-line cursor"></div>
+  </div>
+</div>
+
+<!-- ── CONTENT ───────────────────────────── -->
+<div id="content">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-inner">
+      <a class="logo" href="#">
+        <div class="logo-icon">💀</div>
+        <div class="logo-text">DEAD<span>it</span></div>
+      </a>
+      <div class="header-search">
+        <input class="search-bar" type="text" placeholder="Search the darkness...">
+      </div>
+      <nav>
+        <button class="nav-btn active">☠ Feed</button>
+        <button class="nav-btn">👁 Explore</button>
+        <button class="nav-btn">🩸 Submit</button>
+      </nav>
+      <button id="nightmare-btn" onclick="toggleNightmare()">☾ NIGHTMARE</button>
+    </div>
+  </header>
+
+  <!-- TICKER -->
+  <div class="ticker">
+    <span style="color:#440000; flex-shrink:0; font-size:10px;">⚠ LIVE:</span>
+    <span class="ticker-item">
+      3,847 souls currently browsing &nbsp;·&nbsp;
+      Last sighting reported 4 minutes ago in sector 7 &nbsp;·&nbsp;
+      DO NOT go to the old Vanthorpe house &nbsp;·&nbsp;
+      The man with no eyes has been seen again &nbsp;·&nbsp;
+      She's been gone for 13 days but her typing indicator keeps appearing &nbsp;·&nbsp;
+      Room 217 remains sealed. The hotel denies its existence &nbsp;·&nbsp;
+      ██████ has been redacted by authorities &nbsp;·&nbsp;
+      "They come when you're almost asleep" — verified witness statement &nbsp;·&nbsp;
+      The last moderator quit without explanation &nbsp;·&nbsp;
+    </span>
+  </div>
+
+  <!-- SORT BAR -->
+  <div class="sort-bar">
+    <div class="sort-inner">
+      <button class="sort-btn active"><span class="icon">🔥</span> Hot</button>
+      <button class="sort-btn"><span class="icon">🆕</span> New</button>
+      <button class="sort-btn"><span class="icon">📈</span> Rising</button>
+      <button class="sort-btn"><span class="icon">☠</span> Top All Time</button>
+      <button class="sort-btn"><span class="icon">🎲</span> Cursed</button>
+    </div>
+  </div>
+
+  <!-- DRIP BAR -->
+  <div class="drip-bar"></div>
+
+  <!-- MAIN -->
+  <div class="main-layout">
+
+    <!-- FEED -->
+    <main class="feed" id="feed"></main>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+
+      <div class="sidebar-card">
+        <div class="sidebar-header">☠ d/UrbanLegends</div>
+        <div class="sidebar-body">
+          <div class="about-text">
+            A community for those who dare to share what they saw. Stories that keep you up at night. Legends that were never meant to leave the shadows.
+          </div>
+          <div class="community-stats">
+            <div class="stat-item">
+              <div class="stat-num flicker">847,293</div>
+              <div class="stat-label">Lost Souls</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-num" style="color:#c0c0c0">
+                <span class="online-dot"></span>3,847
+              </div>
+              <div class="stat-label">Awake Now</div>
+            </div>
+          </div>
+          <button class="sidebar-submit" onclick="openSubmitModal()">+ SUBMIT A STORY</button>
+          <button class="sidebar-submit" style="background:linear-gradient(135deg,#0d0d0d,#1a1a1a); border:1px solid #222; color:#888; font-size:11px; padding:6px;">
+            Create Community
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-card">
+        <div class="sidebar-header">🩸 Categories</div>
+        <div class="sidebar-body" style="padding: 8px 14px;">
+          <ul class="category-list">
+            <li><a href="#"><span class="cat-icon">👁</span> Entities & Creatures<span class="cat-count">2.4k</span></a></li>
+            <li><a href="#"><span class="cat-icon">🏚</span> Haunted Places<span class="cat-count">1.9k</span></a></li>
+            <li><a href="#"><span class="cat-icon">📞</span> Unexplained Calls<span class="cat-count">847</span></a></li>
+            <li><a href="#"><span class="cat-icon">🪞</span> Mirror Phenomena<span class="cat-count">612</span></a></li>
+            <li><a href="#"><span class="cat-icon">🌒</span> Disappearances<span class="cat-count">3.1k</span></a></li>
+            <li><a href="#"><span class="cat-icon">🩸</span> Ritual & Occult<span class="cat-count">988</span></a></li>
+            <li><a href="#"><span class="cat-icon">💻</span> Digital Hauntings<span class="cat-count">544</span></a></li>
+            <li><a href="#"><span class="cat-icon">📷</span> Photographic Evidence<span class="cat-count">321</span></a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="sidebar-card">
+        <div class="sidebar-header">⚠ Rules</div>
+        <div class="sidebar-body" style="padding: 8px 14px;">
+          <ul class="rules-list">
+            <li>Stories must be told as if they happened to you.</li>
+            <li>No debunking in comments unless flaired [SKEPTIC].</li>
+            <li>Do not name living people without consent.</li>
+            <li>No real rituals or instructions that could cause harm.</li>
+            <li>Graphic content must be marked [NSFW HORROR].</li>
+            <li>Moderators reserve the right to remove any post without explanation.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="sidebar-card">
+        <div class="sidebar-header">👁 Moderators</div>
+        <div class="sidebar-body">
+          <div style="font-family:'Share Tech Mono',monospace; font-size:12px; color: var(--text-dead); display:flex; flex-direction:column; gap:8px;">
+            <span style="color:#666">u/<span style="color:#aaa">The_Watcher_1994</span></span>
+            <span style="color:#666">u/<span style="color:#aaa">VoidWhisper</span></span>
+            <span style="color:#666">u/<span style="color:#aaa">ShadowMod_III</span> <span style="color:#440000; font-size:10px;">• last seen 13 days ago</span></span>
+            <span style="color:#333; font-style:italic; font-size:11px;">███████ • [REDACTED]</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <footer>
+    <p style="margin-bottom:6px;">DEADit — The dark web's premier storytelling community</p>
+    <p>
+      <a href="#">Privacy</a> · <a href="#">Content Policy</a> · <a href="#">Moderator Guidelines</a> · <a href="#">Contact the Void</a>
+    </p>
+    <p style="margin-top: 8px; color:#1a1a1a; font-size:10px;">They know you're here. They've always known.</p>
+  </footer>
+</div>
+
+<!-- SOUND BTN -->
+<button id="sound-btn" onclick="toggleSound()" title="Toggle ambient sound">🔇</button>
+
+<!-- SUBMIT MODAL -->
+<div class="modal-overlay" id="submit-modal">
+  <div class="modal">
+    <div class="modal-title">☠ Share Your Story</div>
+    <input class="modal-input" type="text" placeholder="Give your story a title..." id="new-title">
+    <textarea class="modal-textarea" placeholder="Tell us what happened... We're listening." id="new-body"></textarea>
+
+    <!-- Image section -->
+    <div style="margin-bottom:12px;">
+      <div style="font-family:Share Tech Mono,monospace;font-size:11px;color:#555;margin-bottom:6px;letter-spacing:1px;">🖼 IMAGE (optionnel)</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+        <input class="modal-input" type="url" id="new-img-url" placeholder="Colle une URL (imgur, unsplash...)" style="flex:1;margin:0;" onkeydown="if(event.key==='Enter'){event.preventDefault();addPostImage();}">
+        <button onclick="addPostImage()" style="background:var(--blood);border:none;color:#fff;padding:8px 12px;border-radius:3px;font-family:Share Tech Mono,monospace;font-size:11px;flex-shrink:0;">+ URL</button>
+      </div>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-family:Share Tech Mono,monospace;font-size:11px;color:var(--blood-bright);cursor:pointer;">
+        📁 Uploader depuis mon appareil
+        <input type="file" accept="image/*" onchange="addPostFile(event)" style="display:none">
+      </label>
+      <div id="post-img-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeSubmitModal()">CANCEL</button>
+      <button class="modal-post" onclick="submitPost()" id="submit-btn">POST TO THE VOID</button>
+    </div>
+    <div id="submit-status" style="text-align:center;font-family:Share Tech Mono,monospace;font-size:11px;color:#555;margin-top:8px;display:none;"></div>
+  </div>
+</div>
+
+<!-- Firebase SDK — chargé juste avant le code qui l'utilise -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
+/* =============================================
+   DATA — POSTS
+============================================= */
+const POSTS = [
+  {
+    id: 1,
+    sub: "d/UrbanLegends",
+    author: "The_Watcher_1994",
+    authorInitial: "W",
+    time: "6 hours ago",
+    flair: "VERIFIED SIGHTING",
+    title: "My neighbor's house has been empty for 3 years, but every night at 3:17 AM, a light turns on in the attic",
+    preview: "I've lived on Elmsworth Crescent for eleven years. The Hadley house went dark in the winter of 2021 after the family never came home from their camping trip. No one was ever found. Social services boarded the windows, the bank took the property, and everyone moved on.",
+    full: `I've lived on Elmsworth Crescent for eleven years. The Hadley house went dark in the winter of 2021 after the family never came home from their camping trip. No one was ever found. Social services boarded the windows, the bank took the property, and everyone moved on. Except I couldn't.\n\nThree weeks ago I couldn't sleep. 3:14 AM. I was making tea when I noticed it through my kitchen window — the attic window of the Hadley house, glowing. A warm, yellowish light, like a lamp. I stood there for four minutes watching it. At exactly 3:18, it went out.\n\nI thought I'd imagined it. Then it happened again the next night. And the next. I've now recorded it on my phone nine times. Always 3:17. Always off by 3:18. Last night I finally went outside to look. The boards on every window were intact, the door sealed with a padlock that hadn't been touched.\n\nBut there were fresh footprints in the frost leading up to the front door. Small ones. Like a child's.`,
+    votes: 18423,
+    awards: ["🏆","👁","🩸"],
+    comments: [
+      { author: "SleeplessInSeattle666", initial: "S", text: "The 3 AM thing is real. I've experienced something similar. Whatever is aware of you in those hours is not something you want to acknowledge. Stop watching.", time: "5h ago", votes: 4821 },
+      { author: "VoidWhisper", initial: "V", text: "I cross-referenced this address. There are three other reports of strange lights in formerly occupied homes within a half-mile radius. This is a pattern.", time: "4h ago", votes: 2344 },
+      { author: "UrbanCryptid_17", initial: "U", text: "The small footprints are what killed me. Please for the love of god update us.", time: "3h ago", votes: 9871 },
+      { author: "nocturnal_archivist", initial: "N", text: "3:17 is interesting. Not 3:00, not 3:33 (which would be obvious). The specificity makes this feel more credible, not less. Something is following a schedule.", time: "2h ago", votes: 3201 }
+    ],
+    thumb: "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=200&q=60"
+  },
+  {
+    id: 2,
+    sub: "d/HauntedPlaces",
+    author: "GlassEyedGhost",
+    authorInitial: "G",
+    time: "14 hours ago",
+    flair: "LOCATION CONFIRMED",
+    title: "The trail in Blackthorn Forest has a 23rd mile marker. The trail is only 18 miles long.",
+    preview: "Hiking alone is something I've done my entire adult life. I know how to navigate, I pack properly, I don't panic. What happened last October on the Blackthorn Ridge trail has made me question every hike I've ever taken.",
+    full: `Hiking alone is something I've done my entire adult life. I know how to navigate, I pack properly, I don't panic. What happened last October on the Blackthorn Ridge trail has made me question every hike I've ever taken.\n\nThe trail is clearly documented as 18.3 miles. I've done it twice before. But on my third trip, around dusk, I passed mile marker 19. I thought it was a park service error. Then 20. Then 21. Each one weathered, official-looking, cemented into the ground.\n\nAt mile marker 22, the forest changed. The birds stopped. The temperature dropped roughly ten degrees. The trees were wrong — too tall, too uniform, the bark facing the wrong direction relative to the sun. At 23, there was a clearing with a fire pit that had ash in it that was still warm. And a single boot. Size 11. My size.\n\nI ran. It took me 40 minutes to reach the trailhead. The sign said the trail was 18.3 miles. I checked my GPS — it showed I'd walked 26.1 miles total. The mile markers after 18 don't show up on any satellite image I've pulled since.`,
+    votes: 24110,
+    awards: ["🏆","🔦","⚠"],
+    comments: [
+      { author: "TrailWarden_Anonymous", initial: "T", text: "Ranger here (throwaway). We've had three missing person cases on trails in that county in five years. No bodies recovered. I can't say more.", time: "12h ago", votes: 11203 },
+      { author: "xXxNocturne", initial: "X", text: "The boot being your size is where I closed the tab. Then immediately reopened it. Then couldn't sleep.", time: "10h ago", votes: 8833 },
+      { author: "paranormal_petra", initial: "P", text: "This matches the 'fold phenomenon' described in three other cases I've documented. Certain trails experience spatial anomalies. You were lucky to exit.", time: "8h ago", votes: 4410 }
+    ],
+    thumb: "https://images.unsplash.com/photo-1448375240586-882707db888b?w=200&q=60"
+  },
+  {
+    id: 3,
+    sub: "d/DigitalHauntings",
+    author: "404_Specter",
+    authorInitial: "4",
+    time: "1 day ago",
+    flair: "SCREENSHOT ATTACHED",
+    title: "My deceased grandmother keeps appearing as an active user in our family group chat. She's been dead for 8 months.",
+    preview: "I don't expect anyone to believe me. I barely believe myself and I'm watching it happen. My grandmother passed in March. We never removed her from the family WhatsApp group because no one could bring themselves to do it.",
+    full: `I don't expect anyone to believe me. I barely believe myself and I'm watching it happen. My grandmother passed in March. We never removed her from the family WhatsApp group because no one could bring themselves to do it.\n\nLast Tuesday, her contact showed "online" at 2:33 AM. My cousin saw it too — we were both awake. It lasted eleven seconds, then went offline. We assumed it was a glitch, her old phone finally dying and pinging the server.\n\nThen came the typing indicator. Three dots. Her name. For 48 seconds. Then nothing. No message sent.\n\nLast Friday at 3 AM, a message came through from her account. It was a single voice note, 4 seconds long. We gathered on a call to listen to it together. It was her voice. It was the phrase she always said to us when we were children, before bed: "Don't let the dark in."\n\nHer phone was buried with her. My uncle confirmed the SIM card was removed and destroyed by the funeral home as per our family's request. Her Apple ID had no other devices linked to it — we checked.`,
+    votes: 41882,
+    awards: ["🏆","🏆","💀","👁"],
+    comments: [
+      { author: "DigitalMortician", initial: "D", text: "I work in data recovery. There is no technical explanation for a voice message being sent from a device that no longer exists with an account that has no active sessions. None.", time: "22h ago", votes: 14502 },
+      { author: "BeyondTheFirewall", initial: "B", text: "'Don't let the dark in' — she was warning you about something. Listen to her.", time: "20h ago", votes: 9921 },
+      { author: "skeptic_always", initial: "S", flair: "SKEPTIC", text: "SIM cards aren't always destroyed properly. Phone could have been cloned. Voice AI can be trained on old recordings. I'm not saying this is fake but there ARE technical explanations.", time: "18h ago", votes: 1102 },
+      { author: "TheVoidLooksBack", initial: "T", text: "Don't let the dark in. Don't let the dark in. Don't let the dark in.", time: "16h ago", votes: 18341 }
+    ],
+    thumb: "https://images.unsplash.com/photo-1544027993-37dbfe43562a?w=200&q=60"
+  },
+  {
+    id: 4,
+    sub: "d/Entities",
+    author: "ShadowObserver_X",
+    authorInitial: "S",
+    time: "2 days ago",
+    flair: "MULTIPLE WITNESSES",
+    title: "Every person who's moved into Apartment 4B on my floor has left within 3 weeks and refuses to say why",
+    preview: "I've lived in the Dunmore Apartments for six years. In that time, apartment 4B — directly across the hall from me — has had seventeen different tenants.",
+    full: `I've lived in the Dunmore Apartments for six years. In that time, apartment 4B — directly across the hall from me — has had seventeen different tenants. Seventeen. I've started keeping a log.\n\nThe pattern is always identical. They arrive, seem normal, often friendly. By week two they stop making eye contact in the hallway. By week three their apartment goes completely quiet — no TV, no cooking smells, nothing. Then they're gone overnight, leaving some furniture behind.\n\nI finally got one to talk. A graduate student named Felix. He called me the morning he left and said only this: "There's something in the walls. It watches you sleep. You get used to it and that's the worst part — when you realize you've gotten used to it."\n\nI pressed him for more. He hung up. His number is now disconnected.\n\nLast month the apartment was empty for two weeks, which never happens. I pressed my ear to the door once at 2 AM. I heard breathing. Slow. Steady. Patient.`,
+    votes: 29334,
+    awards: ["⚠","👁"],
+    comments: [
+      { author: "ApartmentHunter_RUN", initial: "A", text: "Getting used to it. That's the line that broke me. That implies extended exposure changes you. What does it do to you when you stop noticing?", time: "1d ago", votes: 7821 },
+      { author: "StructuralEngineer_Anon", initial: "S", text: "Old buildings have infrasound issues — low frequency vibrations that cause unease, paranoia, visual disturbances. But that doesn't explain seventeen tenants or the breathing.", time: "23h ago", votes: 3211 },
+      { author: "MidnightArchivist", initial: "M", text: "Don't ever put your ear to that door again. You're letting it know you're aware of it.", time: "20h ago", votes: 12088 }
+    ],
+    thumb: "https://images.unsplash.com/photo-1514539079130-25950c84af65?w=200&q=60"
+  },
+  {
+    id: 5,
+    sub: "d/MirrorPhenomena",
+    author: "ReflectionDread",
+    authorInitial: "R",
+    time: "3 days ago",
+    flair: "ONGOING",
+    title: "I covered every mirror in my house six months ago. Last night I heard one of them fall and break. I live alone. Nothing was on the floor.",
+    preview: "This started after I moved into the house on Cedarwood Avenue. The previous tenant had left suddenly — landlord said he'd 'moved abroad.' His stuff was still here when I arrived.",
+    full: `This started after I moved into the house on Cedarwood Avenue. The previous tenant had left suddenly — landlord said he'd "moved abroad." His stuff was still here when I arrived, including a full-length antique mirror in the bedroom, ornate, heavy, mahogany frame.\n\nThe first week I thought I was imagining it. My reflection was always just slightly delayed. A half-second behind, maybe less. Enough to make you doubt yourself.\n\nBy week three, it wasn't mimicking me at all. It was doing its own thing.\n\nI covered that mirror and every other reflective surface in the house with black cloth. Bathroom mirrors, windows at night, even the microwave door. Six months of this. Last Tuesday at 4 AM, I heard a crack from the bedroom, then shattering. I grabbed a flashlight and went in. The black cloth was still draped over where the mirror had been. But on the floor — nothing. No glass. No mirror. It was just gone. The cloth was lying flat against the wall like it was still covering something, but when I pulled it back, the wall was bare, no mounting hardware, no marks.\n\nWhere did it go? It weighed at least thirty pounds.`,
+    votes: 33990,
+    awards: ["🪞","💀","🏆"],
+    comments: [
+      { author: "OccultScholar_VIII", initial: "O", text: "Mirrors in folklore are considered thresholds. If something was using yours as a door, covering it would have trapped it. Disappeared mirrors in these contexts suggest it found another way through.", time: "2d ago", votes: 16432 },
+      { author: "justanormaluser99", initial: "J", text: "I came to the comments to feel better. I do not feel better.", time: "2d ago", votes: 28111 },
+      { author: "GlassEyedGhost", initial: "G", text: "The previous tenant 'moved abroad.' Has anyone actually confirmed he's alive?", time: "1d ago", votes: 9003 }
+    ],
+    thumb: "https://images.unsplash.com/photo-1516715094483-75da7dee9758?w=200&q=60"
+  }
+];
+
+/* =============================================
+   FIREBASE — synchronisation temps réel
+   Posts partagés entre tous les appareils
+============================================= */
+const FB_CONFIG = {
+  apiKey:            "AIzaSyC6yKpXh2rp27YA7AkA80KUMDxQvSSOPtA",
+  authDomain:        "deadit-project.firebaseapp.com",
+  databaseURL:       "https://deadit-project-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:         "deadit-project",
+  storageBucket:     "deadit-project.firebasestorage.app",
+  messagingSenderId: "207059988568",
+  appId:             "1:207059988568:web:0c3fc7bac64859fbb35a2d"
+};
+
+let db = null, postsRef = null, fbOK = false;
+
+try {
+  if (typeof firebase === 'undefined') throw new Error('SDK non chargé');
+  firebase.initializeApp(FB_CONFIG);
+  db       = firebase.database();
+  postsRef = db.ref('posts');
+  fbOK     = true;
+  console.log('✓ Firebase connecté');
+} catch(e) {
+  console.warn('Firebase non dispo:', e.message);
+  fbOK = false;
+}
+
+/* Écoute temps réel — met à jour le feed à chaque changement */
+function startLiveSync() {
+  postsRef.on('value', snap => {
+    /* Vide les posts utilisateurs existants */
+    for (let i = POSTS.length - 1; i >= 0; i--) {
+      if (POSTS[i].isUserPost) POSTS.splice(i, 1);
+    }
+    const data = snap.val();
+    if (data) {
+      Object.entries(data)
+        .map(([key, val]) => ({
+          ...val,
+          _fbKey:    key,
+          isUserPost: true,
+          awards:    Array.isArray(val.awards)   ? val.awards   : [],
+          comments:  Array.isArray(val.comments) ? val.comments : [],
+          images:    Array.isArray(val.images)   ? val.images   : [],
+          thumb:     val.thumb  || null,
+          votes:     val.votes  || 0,
+          title:     val.title  || '',
+          full:      val.full   || '',
+          preview:   val.preview|| '',
+          author:    val.author || 'Anonymous',
+          sub:       val.sub    || 'd/UrbanLegends',
+          flair:     val.flair  || 'NEW REPORT',
+          time:      val.time   || 'recently',
+        }))
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        .forEach(p => POSTS.unshift(p));
+    }
+    renderFeed();
+  });
+}
+
+/* Lance la synchro si Firebase dispo, sinon localStorage */
+function injectUserPosts() {
+  if (fbOK) {
+    startLiveSync();   /* Firebase gère tout — renderFeed appelé automatiquement */
+  } else {
+    /* Fallback local */
+    try {
+      const raw = localStorage.getItem('deadit_local');
+      if (raw) JSON.parse(raw).forEach(p => {
+        if (!POSTS.find(x => x.id === p.id)) { p.isUserPost = true; POSTS.unshift(p); }
+      });
+    } catch(e) {}
+  }
+}
+
+/* Images staging */
+let _imgs = [];
+
+function addPostImage() {
+  const u = document.getElementById('new-img-url').value.trim();
+  if (!u) return;
+  _imgs.push(u);
+  document.getElementById('new-img-url').value = '';
+  _renderImgPreview();
+  /* Focus de retour sur le champ pour faciliter l'ajout de plusieurs images */
+  document.getElementById('new-img-url').focus();
+}
+
+function addPostFile(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  /* Compresse à max 600px */
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      /* Compression agressive : max 400px, qualité 0.5 pour rester sous 400KB */
+      const MAX = 400, ratio = Math.min(MAX/img.width, MAX/img.height, 1);
+      const c = document.createElement('canvas');
+      c.width = img.width*ratio; c.height = img.height*ratio;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const data = c.toDataURL('image/jpeg', 0.5);
+      const kb = Math.round(data.length * 0.75 / 1024);
+      if (kb > 400) {
+        alert('Image encore trop grande (' + kb + 'KB). Utilise plutôt une URL internet (héberge sur imgur.com par exemple).');
+        return;
+      }
+      _imgs.push(data);
+      _renderImgPreview();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  evt.target.value = '';
+}
+
+function _renderImgPreview() {
+  const c = document.getElementById('post-img-preview');
+  if (!c) return;
+  c.innerHTML = _imgs.map((u, i) => `
+    <div style="position:relative;width:70px;height:52px;border:1px solid #2a0000;border-radius:3px;overflow:hidden;">
+      <img src="${u}" style="width:100%;height:100%;object-fit:cover;filter:brightness(0.7);" onerror="this.style.display='none'">
+      <button onclick="_imgs.splice(${i},1);_renderImgPreview()"
+        style="position:absolute;top:1px;right:1px;background:rgba(100,0,0,0.9);color:#fff;
+               border:none;width:16px;height:16px;border-radius:50%;font-size:9px;line-height:1;">✕</button>
+    </div>`).join('');
+}
+
+/* =============================================
+   RENDER POSTS
+============================================= */
+function renderFeed() {
+  const feed = document.getElementById('feed');
+  feed.innerHTML = '';
+
+  // Always user posts first, then the rest
+  const userPosts    = POSTS.filter(p => p.isUserPost);
+  const regularPosts = POSTS.filter(p => !p.isUserPost);
+  const ordered = [...userPosts, ...regularPosts];
+
+  ordered.forEach((p, i) => {
+    const el = document.createElement('div');
+    el.className = p.isUserPost ? 'post-card featured-user-post' : 'post-card';
+    el.innerHTML = buildPostHTML(p);
+    feed.appendChild(el);
+    setTimeout(() => { el.style.opacity = '1'; el.style.transform = 'none'; }, i * 80);
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(12px)';
+    el.style.transition = 'opacity 0.4s, transform 0.4s';
+  });
+}
+
+function buildPostHTML(p) {
+  const awards = (p.awards || []).map(a => `<span class="award" title="Award">${a}</span>`).join('');
+  const comments = (p.comments || []).map(c => buildCommentHTML(c)).join('');
+  /* Images : utilise images[] si présent, sinon thumb (compat anciens posts) */
+  const _imgList = (p.images && p.images.length > 0) ? p.images : (p.thumb ? [p.thumb] : []);
+  const thumbHTML = _imgList.length > 0
+    ? `<div class="post-thumb" onclick="togglePost(${p.id})">
+        <img src="${_imgList[0]}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'">
+        <div class="thumb-overlay">🔍</div>
+        ${_imgList.length > 1 ? `<div style="position:absolute;bottom:2px;right:3px;background:rgba(100,0,0,0.85);color:#fff;font-family:Share Tech Mono,monospace;font-size:8px;padding:1px 4px;border-radius:2px;">+${_imgList.length-1}</div>` : ''}
+       </div>`
+    : '';
+  /* Galerie complète affichée dans le post ouvert */
+  const _gallery = _imgList.length > 0
+    ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">${_imgList.map(u =>
+        `<img src="${u}" loading="lazy" onerror="this.style.display='none'"
+          style="max-width:100%;max-height:300px;object-fit:contain;border-radius:4px;
+                 border:1px solid #2a0000;filter:brightness(0.85);cursor:zoom-in;transition:filter 0.3s;"
+          onmouseover="this.style.filter='brightness(1)'" onmouseout="this.style.filter='brightness(0.85)'">`
+      ).join('')}</div>` : '';
+  const userBadge = p.isUserPost
+    ? `<span class="user-post-badge">🩸 YOUR STORY</span>`
+    : '';
+
+  return `
+    <div class="vote-col">
+      <button class="vote-btn" id="up-${p.id}" onclick="vote(${p.id},'up')" title="Upvote">▲</button>
+      <div class="vote-count ${p.votes > 20000 ? 'hot' : ''}" id="vc-${p.id}">${formatNum(p.votes)}</div>
+      <button class="vote-btn" id="dn-${p.id}" onclick="vote(${p.id},'down')" title="Downvote">▼</button>
+    </div>
+    <div class="post-body">
+      <div class="post-meta">
+        <span class="post-sub">${p.sub}</span>
+        <span>·</span>
+        <span class="post-author">Posted by <span>u/${p.author}</span></span>
+        <span class="post-time">${p.time}</span>
+        <span class="flair">${p.flair}</span>
+        ${userBadge}
+        <div class="awards">${awards}</div>
+      </div>
+      <div class="post-title" onclick="togglePost(${p.id})">${p.title}</div>
+      <div class="post-preview">${p.preview}</div>
+      <div class="post-expanded-content" id="expanded-${p.id}">${p.full.replace(/\n/g, '<br><br>')}${_gallery}</div>
+      <div class="post-actions">
+        <button class="post-action-btn read-more" id="rmb-${p.id}" onclick="togglePost(${p.id})">📖 Read More</button>
+        <button class="post-action-btn" onclick="toggleComments(${p.id})">💬 ${(p.comments||[]).length} Comments</button>
+        <button class="post-action-btn">🔗 Share</button>
+        ${p.isUserPost ? `<button class="post-action-btn" style="color:#660000" onclick="deleteUserPost(${p.id})">🗑 Delete</button>` : '<button class="post-action-btn">⚑ Report</button>'}
+        <button class="post-action-btn">⋯ More</button>
+      </div>
+    </div>
+    ${thumbHTML}
+    <div class="comments-section" id="comments-${p.id}">
+      <div class="comment-form">
+        <textarea class="comment-input" placeholder="Share what you know... or what you've seen."></textarea>
+        <button class="comment-submit">COMMENT</button>
+      </div>
+      <div id="clist-${p.id}">${comments}</div>
+    </div>
+  `;
+}
+
+function buildCommentHTML(c) {
+  const flairHTML = c.flair ? `<span class="flair" style="font-size:9px; padding: 0 5px; margin-left:4px;">${c.flair}</span>` : '';
+  return `
+    <div class="comment">
+      <div class="comment-avatar" style="background: hsl(${c.initial.charCodeAt(0) * 13 % 360},40%,18%);">
+        ${c.initial}
+      </div>
+      <div class="comment-right">
+        <div class="comment-header">
+          <span class="comment-author">u/${c.author}</span>${flairHTML}
+          <span style="margin-left:8px">${c.time}</span>
+          <span style="margin-left:8px; color: var(--blood-bright);">▲ ${formatNum(c.votes)}</span>
+        </div>
+        <div class="comment-text">${c.text}</div>
+        <div class="comment-actions">
+          <button>▲ upvote</button>
+          <button>▼ downvote</button>
+          <button>↩ reply</button>
+          <button>⚑ report</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function formatNum(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return n;
+}
+
+/* =============================================
+   INTERACTIVITY
+============================================= */
+const voteState = {};
+
+function vote(id, dir) {
+  const post = POSTS.find(p => p.id === id);
+  if (!post) return;
+  const key = `${id}-${dir}`;
+  const upBtn = document.getElementById(`up-${id}`);
+  const dnBtn = document.getElementById(`dn-${id}`);
+  const vc   = document.getElementById(`vc-${id}`);
+
+  if (voteState[id] === dir) {
+    post.votes += dir === 'up' ? -1 : 1;
+    voteState[id] = null;
+    upBtn.classList.remove('upvoted');
+    dnBtn.classList.remove('downvoted');
+  } else {
+    if (voteState[id] === 'up') post.votes--;
+    if (voteState[id] === 'down') post.votes++;
+    post.votes += dir === 'up' ? 1 : -1;
+    voteState[id] = dir;
+    upBtn.classList.toggle('upvoted', dir === 'up');
+    dnBtn.classList.toggle('downvoted', dir === 'down');
+  }
+  vc.textContent = formatNum(post.votes);
+  vc.className = `vote-count ${post.votes > 20000 ? 'hot' : ''}`;
+
+  if (dir === 'up') spawnBloodDrop(upBtn);
+}
+
+function spawnBloodDrop(btn) {
+  const rect = btn.getBoundingClientRect();
+  const drop = document.createElement('div');
+  drop.style.cssText = `
+    position:fixed; left:${rect.left + rect.width/2}px; top:${rect.top}px;
+    width:4px; height:10px; background:var(--blood-bright);
+    border-radius:0 0 50% 50%; pointer-events:none; z-index:9999;
+    animation: dropFall 0.8s ease-in forwards;
+  `;
+  const style = document.createElement('style');
+  style.textContent = `@keyframes dropFall { to { transform: translateY(40px); opacity:0; } }`;
+  document.head.appendChild(style);
+  document.body.appendChild(drop);
+  setTimeout(() => drop.remove(), 900);
+}
+
+function togglePost(id) {
+  const exp = document.getElementById(`expanded-${id}`);
+  const btn = document.getElementById(`rmb-${id}`);
+  const pre = exp.previousElementSibling;
+  const isOpen = exp.classList.contains('visible');
+  exp.classList.toggle('visible');
+  if (isOpen) {
+    btn.textContent = '📖 Read More';
+    if (pre) pre.style.display = '';
+  } else {
+    btn.textContent = '📕 Collapse';
+    if (pre) pre.style.display = 'none';
+    toggleComments(id, true);
+  }
+}
+
+function toggleComments(id, forceOpen) {
+  const cs = document.getElementById(`comments-${id}`);
+  if (forceOpen) cs.classList.add('visible');
+  else cs.classList.toggle('visible');
+}
+
+/* =============================================
+   SUBMIT MODAL
+============================================= */
+function openSubmitModal() {
+  _imgs = [];
+  _renderImgPreview();
+  document.getElementById('submit-status').style.display = 'none';
+  document.getElementById('submit-modal').classList.add('open');
+}
+function closeSubmitModal() {
+  document.getElementById('submit-modal').classList.remove('open');
+}
+function submitPost() {
+  const title = document.getElementById('new-title').value.trim();
+  const body  = document.getElementById('new-body').value.trim();
+  if (!title || !body) return;
+
+  /* Auto-récupère l'URL si l'utilisateur a oublié de cliquer "+ URL" */
+  const _pendingUrl = document.getElementById('new-img-url').value.trim();
+  if (_pendingUrl && !_imgs.includes(_pendingUrl)) _imgs.push(_pendingUrl);
+
+  /* Filtre les images trop grosses pour Firebase (base64 > 500KB → URL seulement) */
+  const _safeImgs = _imgs.filter(u => {
+    if (u.startsWith('data:')) {
+      const kb = Math.round(u.length * 0.75 / 1024);
+      if (kb > 400) {
+        console.warn('Image trop grande (' + kb + 'KB), ignorée. Utilise une URL à la place.');
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const post = {
+    id:        Date.now(),
+    createdAt: Date.now(),
+    sub:       'd/UrbanLegends',
+    author:    generateUsername(),
+    time:      'just now',
+    flair:     'NEW REPORT',
+    isUserPost: true,
+    title,
+    preview:   body.substring(0, 180) + (body.length > 180 ? '...' : ''),
+    full:      body,
+    votes:     1,
+    awards:    [],
+    comments:  [],
+    thumb:     _safeImgs.length > 0 ? _safeImgs[0] : null,
+    images:    [..._safeImgs]
+  };
+
+  const statusEl = document.getElementById('submit-status');
+  const btn      = document.getElementById('submit-btn');
+
+  if (fbOK) {
+    /* Envoi Firebase */
+    btn.disabled = true;
+    statusEl.style.display = 'block';
+    statusEl.textContent   = '⏳ Publication en cours...';
+    postsRef.push(post)
+      .then(() => {
+        btn.disabled = false;
+        statusEl.style.display = 'none';
+        closeSubmitModal();
+        document.getElementById('new-title').value = '';
+        document.getElementById('new-body').value  = '';
+        _imgs = [];
+        flashLightning('#001a00');
+        addTerminalLine('> NEW_ENTRY SUBMITTED — ALL DEVICES SYNCED', 'alert');
+        showAccessWarning('STORY UPLOADED — THEY WILL READ IT');
+      })
+      .catch(err => {
+        btn.disabled = false;
+        statusEl.textContent = '✗ Erreur : ' + err.message;
+      });
+  } else {
+    /* Fallback local si Firebase absent */
+    try {
+      const saved = JSON.parse(localStorage.getItem('deadit_local') || '[]');
+      saved.unshift(post);
+      localStorage.setItem('deadit_local', JSON.stringify(saved));
+    } catch(e) {}
+    POSTS.unshift(post);
+    closeSubmitModal();
+    document.getElementById('new-title').value = '';
+    document.getElementById('new-body').value  = '';
+    _imgs = [];
+    renderFeed();
+    flashLightning('#001a00');
+  }
+}
+
+function deleteUserPost(id) {
+  const post = POSTS.find(p => p.id === id);
+  if (!post) return;
+  if (fbOK && post._fbKey) {
+    postsRef.child(post._fbKey).remove();
+    /* Le listener Firebase met à jour le feed automatiquement */
+  } else {
+    const idx = POSTS.findIndex(p => p.id === id);
+    if (idx !== -1) POSTS.splice(idx, 1);
+    renderFeed();
+  }
+}
+
+function generateUsername() {
+  const adj = ['Hollow','Crimson','Void','Silent','Pale','Broken','Shadow','Cursed','Ashen','Phantom'];
+  const noun = ['Walker','Witness','Observer','Drifter','Specter','Remnant','Watcher','Survivor'];
+  return adj[Math.floor(Math.random()*adj.length)] + '_' + noun[Math.floor(Math.random()*noun.length)] + '_' + Math.floor(Math.random()*999);
+}
+
+/* =============================================
+   SORT BUTTONS
+============================================= */
+document.querySelectorAll('.sort-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    // Sort logic
+    const label = this.textContent.trim();
+    if (label.includes('New')) {
+      POSTS.sort(() => Math.random() - 0.5);
+    } else if (label.includes('Top')) {
+      POSTS.sort((a,b) => b.votes - a.votes);
+    } else if (label.includes('Hot')) {
+      POSTS.sort((a,b) => b.votes - a.votes);
+    } else if (label.includes('Cursed')) {
+      POSTS.sort(() => Math.random() - 0.5);
+    }
+    renderFeed();
+  });
+});
+
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    if (this.textContent.includes('Submit')) openSubmitModal();
+  });
+});
+
+/* =============================================
+   NIGHTMARE MODE
+============================================= */
+let nightmareActive = false;
+function toggleNightmare() {
+  nightmareActive = !nightmareActive;
+  document.body.classList.toggle('nightmare', nightmareActive);
+  document.getElementById('nightmare-btn').classList.toggle('active', nightmareActive);
+  if (nightmareActive) {
+    nightmareInterval = setInterval(() => {
+      if (Math.random() < 0.3) flashLightning();
+      if (Math.random() < 0.15) triggerBlackout();
+      if (Math.random() < 0.4) spawnCreepyText();
+      if (Math.random() < 0.2) triggerGlitch();
+    }, 2000);
+  } else {
+    clearInterval(nightmareInterval);
+  }
+}
+let nightmareInterval;
+
+/* =============================================
+   LIGHTNING
+============================================= */
+/* ── helper : recursive fractal lightning bolt ──────────
+   Draws on bCtx from (x1,y1) → (x2,y2)
+   roughness = max perpendicular offset
+   depth     = recursion depth (≥1)
+───────────────────────────────────────────────────── */
+function _drawBolt(bCtx, x1, y1, x2, y2, roughness, depth, isMain) {
+  if (depth === 0) {
+    /* draw terminal segment */
+    bCtx.beginPath();
+    bCtx.moveTo(x1, y1);
+    bCtx.lineTo(x2, y2);
+    bCtx.stroke();
+    return;
+  }
+  /* midpoint displaced perpendicularly */
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx*dx + dy*dy) || 1;
+  const nx = -dy / len, ny = dx / len;           /* normal to segment */
+  const disp = (Math.random() - 0.5) * roughness;
+  const mx = (x1 + x2) / 2 + nx * disp;
+  const my = (y1 + y2) / 2 + ny * disp;
+
+  _drawBolt(bCtx, x1, y1, mx, my, roughness * 0.55, depth - 1, isMain);
+  _drawBolt(bCtx, mx, my, x2, y2, roughness * 0.55, depth - 1, isMain);
+
+  /* optional fork branch */
+  if (isMain && depth > 2 && Math.random() < 0.45) {
+    const bx = mx + (Math.random() - 0.5) * 180;
+    const by = my + 90 + Math.random() * 160;
+    bCtx.globalAlpha = 0.45;
+    _drawBolt(bCtx, mx, my, bx, by, roughness * 0.4, depth - 2, false);
+    bCtx.globalAlpha = 1.0;
+  }
+}
+
+/* ── main flashLightning ── */
+function flashLightning(color) {
+  /* ── screen flash overlay ── */
+  const layer = document.getElementById('lightning-layer');
+
+  /* ── bolt canvas ── */
+  const bc  = document.getElementById('bolt-canvas');
+  const bCtx = bc.getContext('2d');
+  bc.width  = window.innerWidth;
+  bc.height = window.innerHeight;
+  bCtx.clearRect(0, 0, bc.width, bc.height);
+
+  /* ── choose start / end positions ── */
+  const startX  = bc.width  * (0.15 + Math.random() * 0.70);
+  const endX    = startX    + (Math.random() - 0.5) * bc.width * 0.5;
+  const endY    = bc.height * (0.55 + Math.random() * 0.45);
+
+  /* ── Pass 1 : wide red outer glow ── */
+  bCtx.save();
+  bCtx.lineCap        = 'round';
+  bCtx.lineJoin       = 'round';
+  bCtx.shadowColor    = 'rgba(255, 30, 30, 1)';
+  bCtx.shadowBlur     = 28;
+  bCtx.strokeStyle    = 'rgba(255, 80, 80, 0.45)';
+  bCtx.lineWidth      = 6;
+  bCtx.globalAlpha    = 1;
+  _drawBolt(bCtx, startX, 0, endX, endY, 180, 7, true);
+  bCtx.restore();
+
+  /* ── Pass 2 : bright white core ── */
+  bCtx.save();
+  bCtx.lineCap        = 'round';
+  bCtx.lineJoin       = 'round';
+  bCtx.shadowColor    = 'rgba(255, 200, 200, 0.9)';
+  bCtx.shadowBlur     = 10;
+  bCtx.strokeStyle    = 'rgba(255, 255, 255, 0.92)';
+  bCtx.lineWidth      = 1.6;
+  _drawBolt(bCtx, startX, 0, endX, endY, 180, 7, false);
+  bCtx.restore();
+
+  /* ── Flash sequence : pre → bright → dark → afterglow → out ── */
+  const col = color || 'rgba(255, 240, 240, 0.10)';
+
+  /* step 0 : pre-flash (dim) */
+  bc.style.opacity    = '0.3';
+  layer.style.background = 'rgba(255,200,180,0.07)';
+  layer.style.opacity    = '0.8';
+
+  setTimeout(() => {
+    /* step 1 : full bright */
+    bc.style.opacity       = '1';
+    layer.style.background = col;
+    layer.style.opacity    = '1';
+
+    setTimeout(() => {
+      /* step 2 : brief dark cut */
+      bc.style.opacity    = '0.05';
+      layer.style.opacity = '0';
+
+      setTimeout(() => {
+        /* step 3 : secondary flash (afterglow) */
+        bc.style.opacity       = '0.65';
+        layer.style.background = 'rgba(255, 180, 150, 0.05)';
+        layer.style.opacity    = '0.55';
+
+        setTimeout(() => {
+          /* step 4 : third flicker */
+          bc.style.opacity    = '0.20';
+          layer.style.opacity = '0.20';
+
+          setTimeout(() => {
+            /* step 5 : fade out completely */
+            bc.style.opacity    = '0';
+            layer.style.opacity = '0';
+            /* clear bolt after full fade */
+            setTimeout(() => bCtx.clearRect(0, 0, bc.width, bc.height), 300);
+          }, 40);
+        }, 55);
+      }, 45);
+    }, 80);
+  }, 35);
+}
+
+/* =============================================
+   GLITCH
+============================================= */
+function triggerGlitch() {
+  const overlay = document.getElementById('glitch-overlay');
+  overlay.style.opacity = '1';
+  overlay.style.transform = `translateX(${(Math.random()-0.5)*8}px)`;
+  setTimeout(() => {
+    overlay.style.opacity = '0';
+    overlay.style.transform = 'none';
+  }, 120 + Math.random() * 180);
+}
+
+/* =============================================
+   BLACKOUT — CINEMATIC BAT SWARM TRANSITION
+   Sequence:
+     1. Quick fade-to-black (100ms)
+     2. Lightning flash + thunder sound
+     3. Bat cloud sweeps left→right across the screen
+     4. Secondary lightning
+     5. Fade back to normal
+============================================= */
+let blackoutRunning = false;
+
+/* ── drawSwarmBat : chauve-souris nette, blanche sur fond noir ───────
+   Silhouette classique halloween :
+     - Deux grandes ailes membraneuses en bezier
+     - Corps ovale + tête ronde + oreilles pointues
+     - Couleur : blanc pur / blanc-bleu pour contraste maximal sur noir
+     - Halo rouge très subtil pour l'ambiance horror
+────────────────────────────────────────────────────────────────── */
+function drawSwarmBat(bCtx, b) {
+  bCtx.save();
+  bCtx.translate(b.x, b.y);
+
+  const flap = Math.sin(b.wing);           /* -1 → +1, amplitude battement  */
+  const upY  = flap * b.size * 0.90;       /* hauteur max de l'aile          */
+  const sz   = b.size;
+
+  /* ── couleur : blanc lumineux pour être visible sur noir ── */
+  const brightness = 210 + Math.abs(flap) * 40;   /* 210-250 selon le battement */
+  bCtx.fillStyle   = `rgb(${brightness}, ${brightness - 10}, ${brightness})`;
+
+  /* halo rouge très léger — ambiance sans gêner la lisibilité */
+  bCtx.shadowColor = 'rgba(255, 60, 60, 0.55)';
+  bCtx.shadowBlur  = 10;
+
+  /* ─────────────────── AILE GAUCHE ─────────────────── */
+  bCtx.beginPath();
+  /* point de départ : centre du corps */
+  bCtx.moveTo(-sz * 0.20, sz * 0.08);
+  /* bord supérieur de l'aile (le "dos" courbé vers le haut) */
+  bCtx.bezierCurveTo(
+    -sz * 0.80, -upY * 0.95,   /* ctrl 1 : tiers interne, vers le haut  */
+    -sz * 1.60, -upY * 0.60,   /* ctrl 2 : tiers externe, encore en haut */
+    -sz * 2.30,  sz * 0.05     /* bout d'aile : légèrement sous l'axe    */
+  );
+  /* bord inférieur de l'aile (retour vers le corps) */
+  bCtx.bezierCurveTo(
+    -sz * 1.75,  sz * 0.38,
+    -sz * 0.90,  sz * 0.28,
+    -sz * 0.20,  sz * 0.16
+  );
+  bCtx.closePath();
+  bCtx.fill();
+
+  /* ─────────────────── AILE DROITE (miroir) ─────────────────── */
+  bCtx.beginPath();
+  bCtx.moveTo( sz * 0.20, sz * 0.08);
+  bCtx.bezierCurveTo(
+     sz * 0.80, -upY * 0.95,
+     sz * 1.60, -upY * 0.60,
+     sz * 2.30,  sz * 0.05
+  );
+  bCtx.bezierCurveTo(
+     sz * 1.75,  sz * 0.38,
+     sz * 0.90,  sz * 0.28,
+     sz * 0.20,  sz * 0.16
+  );
+  bCtx.closePath();
+  bCtx.fill();
+
+  /* ─────────────────── CORPS ─────────────────── */
+  bCtx.shadowBlur = 0;                         /* reset shadow pour le corps */
+  bCtx.beginPath();
+  bCtx.ellipse(0, sz * 0.06, sz * 0.26, sz * 0.15, 0, 0, Math.PI * 2);
+  bCtx.fill();
+
+  /* ─────────────────── TÊTE ─────────────────── */
+  bCtx.beginPath();
+  bCtx.arc(0, -sz * 0.15, sz * 0.20, 0, Math.PI * 2);
+  bCtx.fill();
+
+  /* ─────────────────── OREILLES ─────────────────── */
+  [-1, 1].forEach(side => {
+    bCtx.beginPath();
+    bCtx.moveTo( side * sz * 0.06,  -sz * 0.28);
+    bCtx.lineTo( side * sz * 0.22,  -sz * 0.60);
+    bCtx.lineTo( side * sz * 0.19,  -sz * 0.26);
+    bCtx.closePath();
+    bCtx.fill();
+  });
+
+  /* ─────────────────── YEUX : points rouges ─────────────────── */
+  bCtx.fillStyle   = 'rgba(255, 30, 30, 1)';
+  bCtx.shadowColor = 'rgba(255, 0, 0, 1)';
+  bCtx.shadowBlur  = 5;
+  bCtx.beginPath(); bCtx.arc(-sz * 0.09, -sz * 0.17, sz * 0.045, 0, Math.PI * 2); bCtx.fill();
+  bCtx.beginPath(); bCtx.arc( sz * 0.09, -sz * 0.17, sz * 0.045, 0, Math.PI * 2); bCtx.fill();
+
+  bCtx.restore();
+}
+
+
+function triggerBlackout() {
+  if (blackoutRunning) return;
+  blackoutRunning = true;
+
+  const bo   = document.getElementById('blackout');
+  const bc   = document.getElementById('blackout-bats');
+  const bCtx = bc.getContext('2d');
+  bc.width   = window.innerWidth;
+  bc.height  = window.innerHeight;
+
+  /* ── STEP 1 : rapid fade to black ── */
+  bo.style.transition = 'opacity 0.10s';
+  bo.style.opacity    = '1';
+
+  setTimeout(() => {
+    /* ── STEP 2 : lightning flash ── */
+    flashLightning();
+
+    /* optional thunder (Web Audio) */
+    try {
+      const tCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const buf  = tCtx.createBuffer(1, tCtx.sampleRate * 1.4, tCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const env = Math.exp(-i / (tCtx.sampleRate * 0.35));
+        data[i] = (Math.random() * 2 - 1) * env;
+      }
+      const src  = tCtx.createBufferSource();
+      const flt  = tCtx.createBiquadFilter();
+      const gain = tCtx.createGain();
+      src.buffer = buf;
+      flt.type   = 'lowpass'; flt.frequency.value = 160;
+      gain.gain.value = 0.5;
+      src.connect(flt); flt.connect(gain); gain.connect(tCtx.destination);
+      src.start();
+      setTimeout(() => tCtx.close(), 2000);
+    } catch(e) {}
+
+    setTimeout(() => {
+      /* ── STEP 3 : slightly lift blackout so white bats contrast on dark bg ── */
+      bo.style.transition = 'opacity 0.08s';
+      bo.style.opacity    = '0.82';   /* not pure black — bats (white) pop against it */
+      bc.style.opacity    = '1';
+
+      /* 40 bats flying left → right, staggered entry */
+      const swarm = Array.from({length: 40}, (_, i) => ({
+        x    : -40 - i * 22,
+        y    : bc.height * 0.1 + Math.random() * bc.height * 0.82,
+        vx   : 14 + Math.random() * 18,
+        vy   : (Math.random() - 0.5) * 2.5,
+        wing : Math.random() * Math.PI * 2,
+        wingDir : 1,
+        wingSpeed: 0.14 + Math.random() * 0.12,
+        size : 26 + Math.random() * 28,   /* 26–54px — bien visible */
+      }));
+
+      let sf = 0;
+      const anim = setInterval(() => {
+        bCtx.clearRect(0, 0, bc.width, bc.height);
+        let allGone = true;
+
+        swarm.forEach(b => {
+          if (b.x < bc.width + 80) allGone = false;
+          b.x   += b.vx;
+          b.y   += b.vy + Math.sin(sf * 0.09 + b.size) * 0.7;
+          b.wing += b.wingSpeed * b.wingDir;
+          if (Math.abs(b.wing) > 1.25) b.wingDir *= -1;
+          drawSwarmBat(bCtx, b);
+        });
+
+        /* secondary lightning mid-swarm */
+        if (sf === 30) flashLightning();
+
+        sf++;
+        if (allGone || sf > 100) {
+          clearInterval(anim);
+          bCtx.clearRect(0, 0, bc.width, bc.height);
+          bc.style.opacity = '0';
+
+          /* ── STEP 4 : fade back to normal ── */
+          bo.style.transition = 'opacity 0.45s';
+          bo.style.opacity    = '0';
+          setTimeout(() => {
+            bo.style.background = '#000';
+            blackoutRunning = false;
+          }, 500);
+        }
+      }, 16);
+    }, 180);
+  }, 110);
+}
+
+/* =============================================
+   SCREAMER (1–3% chance)
+============================================= */
+const screamerTexts = [
+  "DON'T LOOK BACK",
+  "IT IS BEHIND YOU",
+  "YOU WERE NOT ALONE",
+  "IT FOUND YOU",
+  "TOO LATE",
+  "LOOK AT YOUR WINDOW",
+  "IT KNOWS YOUR NAME",
+];
+let screamerCooldown = false;
+
+function triggerScreamer() {
+  if (screamerCooldown) return;
+  screamerCooldown = true;
+  const overlay = document.getElementById('screamer-overlay');
+  const txt = document.getElementById('screamer-text');
+  txt.textContent = screamerTexts[Math.floor(Math.random() * screamerTexts.length)];
+
+  // sharp flash in
+  overlay.style.transition = 'none';
+  overlay.style.opacity = '1';
+  txt.style.transform = `scale(${1 + Math.random() * 0.3})`;
+  txt.style.letterSpacing = (2 + Math.random() * 8) + 'px';
+
+  // short screamer sound if audio on
+  if (soundEnabled && audioCtx) {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.value = 220 + Math.random() * 180;
+    g.gain.setValueAtTime(0.18, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + 0.3);
+  }
+
+  setTimeout(() => {
+    overlay.style.transition = 'opacity 0.2s';
+    overlay.style.opacity = '0';
+    setTimeout(() => {
+      screamerCooldown = false;
+    }, 30000); // 30s cooldown between screamers
+  }, 180 + Math.random() * 120);
+}
+
+/* =============================================
+   SYSTEM TERMINAL LOG
+============================================= */
+const terminalMessages = [
+  { text: '> SCANNING USER_AGENT... LOGGED', cls: 'warn' },
+  { text: '> ██████████ [REDACTED BY ORDER 7-B]', cls: 'alert' },
+  { text: '> ARCHIVE_SECTOR_7 — ACCESS DENIED', cls: '' },
+  { text: '> CONTENT_HASH: ff0a3b9c... FLAGGED', cls: 'warn' },
+  { text: '> MODERATOR ShadowMod_III — OFFLINE 13d', cls: '' },
+  { text: '> UNAUTHORIZED CONTENT DETECTED', cls: 'alert' },
+  { text: '> RESTORING CORRUPTED ENTRY...', cls: '' },
+  { text: '> GEOLOCATION: YOU ARE BEING TRACED', cls: 'alert' },
+  { text: '> WARNING: DO NOT SCROLL FURTHER', cls: 'warn' },
+  { text: '> ENTRY_404: THE MISSING POSTS', cls: '' },
+  { text: '> TOR_NODE_17 COMPROMISED', cls: 'warn' },
+  { text: '> MEMORY_LEAK IN SECTOR ██', cls: '' },
+  { text: '> NEW SOUL JOINED THE ARCHIVE', cls: '' },
+  { text: '> ████ HAS READ YOUR HISTORY', cls: 'alert' },
+  { text: '> CENSOR_BYPASS: OK — PROCEED', cls: '' },
+  { text: '> DEAD_DROP RECEIVED — DECRYPTING', cls: 'warn' },
+  { text: '> IT IS STILL WATCHING THIS SESSION', cls: 'alert' },
+];
+
+let termVisible = false;
+let termTimer;
+
+function addTerminalLine(text, cls = '') {
+  const body = document.getElementById('terminal-body');
+  if (!body) return;
+  const cursor = body.querySelector('.cursor');
+  if (cursor) cursor.remove();
+  const line = document.createElement('div');
+  line.className = 'terminal-line' + (cls ? ' ' + cls : '');
+  line.textContent = text;
+  body.appendChild(line);
+  const newCursor = document.createElement('div');
+  newCursor.className = 'terminal-line cursor';
+  body.appendChild(newCursor);
+  // keep max 5 lines
+  while (body.children.length > 6) body.removeChild(body.firstChild);
+  body.scrollTop = body.scrollHeight;
+}
+
+function showTerminal() {
+  const t = document.getElementById('system-terminal');
+  t.classList.add('visible');
+  termVisible = true;
+  clearTimeout(termTimer);
+  termTimer = setTimeout(hideTerminal, 5000 + Math.random() * 4000);
+}
+function hideTerminal() {
+  document.getElementById('system-terminal').classList.remove('visible');
+  termVisible = false;
+}
+function triggerTerminalEvent() {
+  const msg = terminalMessages[Math.floor(Math.random() * terminalMessages.length)];
+  addTerminalLine(msg.text, msg.cls);
+  showTerminal();
+}
+
+// Update terminal clock
+setInterval(() => {
+  const el = document.getElementById('term-time');
+  if (el) {
+    const now = new Date();
+    el.textContent = now.toTimeString().slice(0,8);
+  }
+}, 1000);
+
+/* =============================================
+   SOUL COUNTER (drifting number)
+============================================= */
+let soulCount = 3847;
+setInterval(() => {
+  soulCount += Math.floor(Math.random() * 5) - 2;
+  if (soulCount < 3800) soulCount = 3800;
+  const el = document.getElementById('soul-count');
+  if (el) el.textContent = soulCount.toLocaleString();
+}, 3700);
+
+/* =============================================
+   ACCESS WARNING FLASH
+============================================= */
+function showAccessWarning(msg) {
+  const el = document.getElementById('access-warning');
+  el.textContent = '⚠ ' + msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+const accessMessages = [
+  "YOU SHOULDN'T BE HERE",
+  "ARCHIVE CORRUPTED — PROCEED WITH CAUTION",
+  "ACCESS LOGGED — IP RECORDED",
+  "UNAUTHORIZED CONTENT DETECTED",
+  "THIS PAGE DOES NOT OFFICIALLY EXIST",
+  "MODERATOR IS WATCHING YOU NOW",
+  "SESSION FLAGGED BY AUTHORITY",
+  "CONTENT RESTRICTED — BYPASSING...",
+];
+setInterval(() => {
+  if (Math.random() < 0.3) {
+    showAccessWarning(accessMessages[Math.floor(Math.random() * accessMessages.length)]);
+  }
+}, 18000);
+/* =============================================
+   BACKGROUND CANVAS — PARTICLES + BATS + FOG
+============================================= */
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resizeCanvas() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// particles (dust motes)
+const particles = Array.from({length: 60}, () => ({
+  x: Math.random() * 1920,
+  y: Math.random() * 1080,
+  r: 0.5 + Math.random() * 1.5,
+  vx: (Math.random() - 0.5) * 0.3,
+  vy: -0.1 - Math.random() * 0.3,
+  alpha: 0.1 + Math.random() * 0.3,
+}));
+
+// fog wisps
+const wisps = Array.from({length: 5}, () => ({
+  x: Math.random() * 1920,
+  y: H * 0.5 + Math.random() * H * 0.5,
+  w: 200 + Math.random() * 400,
+  h: 60 + Math.random() * 100,
+  alpha: 0.02 + Math.random() * 0.04,
+  vx: (Math.random() - 0.5) * 0.4,
+}));
+
+
+let frame = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  ctx.clearRect(0, 0, W, H);
+  frame++;
+
+  // fog wisps
+  wisps.forEach(w => {
+    const grad = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, w.w);
+    grad.addColorStop(0, `rgba(30,0,0,${w.alpha})`);
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(w.x, w.y, w.w, w.h, 0, 0, Math.PI * 2);
+    ctx.fill();
+    w.x += w.vx;
+    if (w.x > W + w.w) w.x = -w.w;
+    if (w.x < -w.w)    w.x = W + w.w;
+  });
+
+  // dust
+  particles.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x % W, p.y % H, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(180,60,60,${p.alpha})`;
+    ctx.fill();
+    p.x = (p.x + p.vx + W) % W;
+    p.y = (p.y + p.vy + H) % H;
+  });
+
+  /* auto-lightning every ~380 frames */
+  if (frame % 380 === 0) {
+    flashLightning();
+  }
+}
+animate();
+
+/* =============================================
+   RANDOM EFFECTS TIMER
+============================================= */
+setInterval(() => {
+  const r = Math.random();
+  if (r < 0.12) flashLightning();
+  if (r < 0.06) spawnCreepyText();
+  if (r < 0.03) triggerGlitch();
+  // Screamer: ~2% chance
+  if (r < 0.02) triggerScreamer();
+  // Terminal log: ~25% chance
+  if (r < 0.25) triggerTerminalEvent();
+}, 4000);
+
+/* =============================================
+   CREEPY TEXT POPUPS
+============================================= */
+const creepyPhrases = [
+  "THEY KNOW YOU'RE READING THIS",
+  "DON'T LOOK BEHIND YOU",
+  "IT'S ALREADY IN YOUR HOUSE",
+  "SHE WAS NEVER FOUND",
+  "ROOM 217 IS OCCUPIED",
+  "THE SECOND SHADOW IS NOT YOURS",
+  "IT'S BEEN FOLLOWING YOU FOR 3 DAYS",
+  "WHO IS STANDING BEHIND YOU",
+  "YOU SHOULDN'T HAVE OPENED THIS",
+  "IT CAN SEE YOUR SCREEN",
+  "HE'S BEEN OUTSIDE YOUR WINDOW",
+  "THE MISSING WERE NEVER MISSING",
+  "ERROR: SOUL NOT FOUND",
+  "01101001 01110100 00100111 01110011 00100000 01101000 01100101 01110010 01100101",
+  "██████ HAS BEEN REDACTED",
+  "YOU WERE NOT SUPPOSED TO FIND THIS",
+  "THIS ARCHIVE HAS BEEN FLAGGED",
+  "ENTRY DELETED — WHY CAN YOU STILL SEE IT?",
+  "DO NOT READ THE LAST POST",
+  "YOUR LOCATION HAS BEEN SHARED",
+  "WE KNOW WHERE YOU ARE",
+  "THE DEEPER YOU GO THE LESS YOU RETURN",
+  "ARCHIVE LEVEL ██ — CLEARANCE DENIED",
+  "THIS SESSION IS MONITORED",
+  "THEY TOOK THE MODERATORS TOO",
+];
+const creepyEmojis = ['👁','💀','🩸','☠','👣','🕯','🪦','👻'];
+
+function spawnCreepyText() {
+  const layer = document.getElementById('popup-layer');
+  const el = document.createElement('div');
+  const isEmoji = Math.random() < 0.3;
+  if (isEmoji) {
+    el.className = 'eye-popup';
+    el.textContent = creepyEmojis[Math.floor(Math.random()*creepyEmojis.length)];
+  } else {
+    el.className = 'creepy-popup';
+    el.textContent = creepyPhrases[Math.floor(Math.random()*creepyPhrases.length)];
+  }
+  el.style.left = (10 + Math.random() * 75) + '%';
+  el.style.top  = (10 + Math.random() * 75) + '%';
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+/* =============================================
+   SOUND (Web Audio API)
+============================================= */
+let audioCtx, soundEnabled = false, soundNodes = [];
+
+function toggleSound() {
+  const btn = document.getElementById('sound-btn');
+  if (!soundEnabled) {
+    soundEnabled = true;
+    btn.textContent = '🔊';
+    startAmbientSound();
+  } else {
+    soundEnabled = false;
+    btn.textContent = '🔇';
+    soundNodes.forEach(n => { try { n.stop(); } catch(e){} });
+    soundNodes = [];
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  }
+}
+
+function startAmbientSound() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // Deep drone
+  function makeDrone(freq, gain, detune=0) {
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    const lfo = audioCtx.createOscillator();
+    const lfoGain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.value = freq;
+    osc.detune.value = detune;
+    lfo.frequency.value = 0.15;
+    lfoGain.gain.value = freq * 0.05;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.frequency);
+    gainNode.gain.value = gain;
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start();
+    lfo.start();
+    soundNodes.push(osc, lfo);
+  }
+  function makeNoise() {
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 3, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.008;
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 200;
+    src.connect(filter);
+    filter.connect(audioCtx.destination);
+    src.start();
+    soundNodes.push(src);
+  }
+  makeDrone(40, 0.06);
+  makeDrone(55, 0.04, -12);
+  makeDrone(80, 0.02, 7);
+  makeNoise();
+
+  // occasional heartbeat
+  function heartbeat() {
+    if (!soundEnabled || !audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.frequency.value = 55;
+    o.type = 'sine';
+    g.gain.setValueAtTime(0, audioCtx.currentTime);
+    g.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + 0.5);
+    setTimeout(() => {
+      if (!soundEnabled || !audioCtx) return;
+      const o2 = audioCtx.createOscillator();
+      const g2 = audioCtx.createGain();
+      o2.frequency.value = 50;
+      o2.type = 'sine';
+      g2.gain.setValueAtTime(0, audioCtx.currentTime);
+      g2.gain.linearRampToValueAtTime(0.09, audioCtx.currentTime + 0.04);
+      g2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+      o2.connect(g2); g2.connect(audioCtx.destination);
+      o2.start(); o2.stop(audioCtx.currentTime + 0.4);
+    }, 200);
+    setTimeout(heartbeat, 1400 + Math.random() * 800);
+  }
+  setTimeout(heartbeat, 1000);
+}
+
+/* =============================================
+   MOUSE TRAIL
+============================================= */
+document.addEventListener('mousemove', (e) => {
+  if (Math.random() > 0.92) {
+    const dot = document.createElement('div');
+    dot.style.cssText = `
+      position:fixed; left:${e.clientX}px; top:${e.clientY}px;
+      width:3px; height:3px; border-radius:50%;
+      background:rgba(139,0,0,0.6); pointer-events:none; z-index:9996;
+      animation: trailFade 0.8s forwards;
+    `;
+    const s = document.createElement('style');
+    s.textContent = `@keyframes trailFade { to { opacity:0; transform: scale(0); } }`;
+    document.head.appendChild(s);
+    document.body.appendChild(dot);
+    setTimeout(() => dot.remove(), 900);
+  }
+});
+
+/* =============================================
+   TYPING EFFECT ON LOGO
+============================================= */
+const originalTitle = 'DEADit — They\'re Still Watching';
+let corruptInterval;
+function corruptTitle() {
+  const chars = '░▒▓█▄▀■□▪▫╬╫╪╩╨╧╦╥╤╣╢╡╠══╬▐▌';
+  let i = 0;
+  corruptInterval = setInterval(() => {
+    if (i >= 3) { document.title = originalTitle; clearInterval(corruptInterval); return; }
+    document.title = originalTitle.split('').map(c =>
+      Math.random() < 0.15 ? chars[Math.floor(Math.random()*chars.length)] : c
+    ).join('');
+    i++;
+  }, 120);
+}
+setInterval(corruptTitle, 15000);
+
+/* =============================================
+   CLOSE MODAL ON BACKDROP CLICK
+============================================= */
+document.getElementById('submit-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeSubmitModal();
+});
+
+/* =============================================
+   INIT
+============================================= */
+// Si Firebase : startLiveSync() dans injectUserPosts() appelle renderFeed()
+// Si pas Firebase : on appelle renderFeed() manuellement après injection locale
+injectUserPosts();
+if (!fbOK) renderFeed();
+
+// First scare after 3s
+setTimeout(() => {
+  flashLightning();
+  setTimeout(spawnCreepyText, 500);
+  setTimeout(() => showAccessWarning("YOU SHOULDN'T BE HERE"), 1800);
+  setTimeout(triggerTerminalEvent, 2400);
+}, 3000);
+
+// Periodic effects
+setInterval(() => {
+  if (Math.random() < 0.2) spawnCreepyText();
+}, 12000);
+
+// Periodic access warnings
+setInterval(() => {
+  if (Math.random() < 0.5) triggerTerminalEvent();
+}, 9000);
+</script>
+</body>
+</html>
